@@ -1,3 +1,4 @@
+use std::env;
 use std::io;
 use std::net::UdpSocket;
 use std::sync::atomic::{AtomicBool, Ordering};
@@ -140,14 +141,14 @@ fn handle_packet(packet: &[u8], vigem: &mut Option<ViGEm>) {
 
 #[cfg(target_os = "windows")]
 fn handle_packet(packet: &[u8], vigem: &mut Option<ViGEm>) {
-    if let Some(vigem) = vigem {
-        let report = ds4_to_x360_packet_map(packet);
-        vigem.target_x360_update(report);
-    }
+    let vigem = vigem.unwrap();
+    let report = ds4_to_x360_packet_map(packet);
+    vigem.target_x360_update(report).unwrap();
 }
 
 #[cfg(not(target_os = "windows"))]
 fn init_vigem(_socket: UdpSocket) -> Option<ViGEm> {
+    let _ = TargetType::X360;
     None
 }
 
@@ -155,17 +156,21 @@ fn init_vigem(_socket: UdpSocket) -> Option<ViGEm> {
 fn init_vigem(socket: UdpSocket) -> Option<ViGEm> {
     let mut vigem = ViGEm::new().unwrap();
     vigem.add_target(TargetType::X360).unwrap();
-    vigem.register_x360_notification(move |large, small, led| {
-        let command_buf: [u8; 4] = [1, large, small, 0];
-        socket.send(&command_buf).unwrap();
-        println!(
-            "Got motor {}, {}, {}, {:?}",
-            large,
-            small,
-            led,
-            socket.read_timeout()
-        );
-    });
+    vigem
+        .register_x360_notification(
+            move |large, small, led| {
+                let command_buf: [u8; 4] = [1, large, small, 0];
+                socket.send(&command_buf).unwrap();
+                println!(
+                    "Got motor {}, {}, {}, {:?}",
+                    large,
+                    small,
+                    led,
+                    socket.read_timeout()
+                );
+            },
+        )
+        .unwrap();
     Some(vigem)
 }
 
@@ -180,7 +185,10 @@ fn main() -> io::Result<()> {
     let socket = UdpSocket::bind("0.0.0.0:0").expect("couldn't bind to address");
     socket.set_read_timeout(Some(Duration::from_millis(8)))?;
     socket
-        .connect("192.168.1.2:9999")
+        .connect((
+            env::args().nth(1).unwrap_or("192.168.1.2".to_string()),
+            9999,
+        ))
         .expect("connect function failed");
     println!("local addr {:?}", socket.local_addr());
     let mut command_buf: [u8; 4] = [0; 4];
