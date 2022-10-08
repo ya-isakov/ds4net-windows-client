@@ -6,4 +6,6 @@ edition = "2018"
 
 [dependencies]
 ctrlc = "3.1"
+
+[target.'cfg(windows)'.dependencies]
 vigemclient-sys = { version = "0.1", path="./vigemclient-sys" }
